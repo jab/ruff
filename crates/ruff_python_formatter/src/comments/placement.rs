@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 
 use ruff_python_ast::whitespace::indentation;
-use ruff_python_ast::AnyNodeRef;
 use ruff_python_ast::{self as ast, Comprehension, Expr, MatchCase, ModModule, Parameters};
+use ruff_python_ast::{AnyNodeRef, Constant};
 use ruff_python_trivia::{
     find_only_token_in_range, indentation_at_offset, BackwardsTokenizer, CommentRanges,
     SimpleToken, SimpleTokenKind, SimpleTokenizer,
@@ -542,6 +542,37 @@ fn handle_own_line_comment_between_statements<'a>(
     // ```
     if !preceding.is_statement() || !following.is_statement() {
         return CommentPlacement::Default(comment);
+    }
+
+    if comment.line_position().is_end_of_line() {
+        return CommentPlacement::Default(comment);
+    }
+
+    // Comments after docstrings need a newline between the docstring and the comment, so we attach
+    // it as leading on the first statement after the docstring.
+    // (https://github.com/astral-sh/ruff/issues/7948)
+    // ```python
+    // class ModuleBrowser:
+    //     """Browse module classes and functions in IDLE."""
+    //     # ^ Insert a newline above here
+    //
+    //     def __init__(self, master, path, *, _htest=False, _utest=False):
+    //         pass
+    // ```
+    if let AnyNodeRef::StmtExpr(preceding_expr) = preceding {
+        // We can't use `is_docstring_stmt` here because there is no `AnyNodeRef` to `&Stmt`
+        // conversion
+        if is_first_statement_in_body(preceding, comment.enclosing_node())
+            && matches!(
+                preceding_expr.value.as_ref(),
+                Expr::Constant(ast::ExprConstant {
+                    value: Constant::Str { .. },
+                    ..
+                })
+            )
+        {
+            return CommentPlacement::leading(following, comment);
+        }
     }
 
     // If the comment is directly attached to the following statement; make it a leading
