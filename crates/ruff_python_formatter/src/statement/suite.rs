@@ -547,9 +547,11 @@ impl<'a> DocstringStmt<'a> {
         };
 
         if let Expr::Constant(ExprConstant { value, .. }) = value.as_ref() {
-            if !value.is_implicit_concatenated() {
-                return Some(DocstringStmt(stmt));
-            }
+            return match value {
+                Constant::Str(value) if !value.implicit_concatenated => Some(DocstringStmt(stmt)),
+                Constant::Bytes(value) if !value.implicit_concatenated => Some(DocstringStmt(stmt)),
+                _ => None,
+            };
         }
 
         None
@@ -581,9 +583,31 @@ impl Format<PyFormatContext<'_>> for DocstringStmt<'_> {
                     constant
                         .format()
                         .with_options(ExprConstantLayout::String(StringLayout::DocString)),
-                    trailing_comments(node_comments.trailing),
                 ]
-            )
+            )?;
+
+            // Comments after docstrings need a newline between the docstring and the comment, so we attach
+            // it as leading on the first statement after the docstring.
+            // (https://github.com/astral-sh/ruff/issues/7948)
+            // ```python
+            // class ModuleBrowser:
+            //     """Browse module classes and functions in IDLE."""
+            //     # ^ Insert a newline above here
+            //
+            //     def __init__(self, master, path, *, _htest=False, _utest=False):
+            //         pass
+            // ```
+            if let Some(own_line) = node_comments
+                .trailing
+                .iter()
+                .find(|comment| comment.line_position().is_own_line())
+            {
+                if lines_before(own_line.start(), f.context().source()) < 2 {
+                    empty_line().fmt(f)?;
+                }
+            }
+
+            trailing_comments(node_comments.trailing).fmt(f)
         }
     }
 }

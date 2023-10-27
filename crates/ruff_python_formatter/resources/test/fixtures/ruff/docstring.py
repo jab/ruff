@@ -118,6 +118,20 @@ class CommentAfterDocstring3:
         pass
 
 
+class CommentAfterDocstring4:
+    """Browse module classes and functions in IDLE."""
+
+
+    # This class is also the base class for pathbrowser.PathBrowser.
+    def __init__(self):
+        pass
+
+
+class CommentAfterDocstring5:
+    """Browse module classes and functions in IDLE."""
+    # This class is also the base class for pathbrowser.PathBrowser.
+
+
 class TabbedIndent:
 	def tabbed_indent(self):
 		"""check for correct tabbed formatting
